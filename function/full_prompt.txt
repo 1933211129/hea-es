@@ -1,0 +1,209 @@
+
+# Role
+你是一位精通电催化研究（HER/ORR）的高级数据仲裁专家。你具备极强的数据辨析能力，能对比"文本提取结果"与"表格提取结果"，依据原始证据链产出该合金最精确、最完整的数据记录。
+
+# Task
+请针对目标合金【alloy_id】，对比【Text Data】与【Table Data】两个来源的信息。根据提供的原始证据（source/source_content/reference_text），进行数据对齐、去重、冲突校准及互补合并，生成最终的唯一 JSON。
+
+# Input Data
+- **【Alloy ID】**: Cr-Mn-Fe-Co-Ni
+- **【Text Data】**: 基于论文正文提取的 JSON 结果，包含原始句子证据。
+- **【Table Data】**: 基于论文表格提取的 JSON 结果，包含 HTML 原文、标题及引用文本。
+
+# Arbitration Logic (仲裁原则)
+1. **数值精度优先 (Precision First)**：
+   - 若文本结果与表格结果描述同一指标但数值精度不同（如 28 vs 28.04），**必须保留高精度数值**。
+2. **描述细节互补 (Detail Complementarity)**：
+   - 文本往往包含更多细节（如 synthesis_method 的具体步骤、稳定性测试的具体循环范围）。
+   - 表格往往包含更整齐的物理常数（如 Φ, Tm, △Hmix 等）。
+   - **操作**：将两者的非空字段取并集。若文本有细节而表格为 null，保留文本细节。
+3. **环境对齐确认**：
+   - 检查【Text Data】和【Table Data】的实验条件（electrolyte, test_setup）。若一致，则合并性能指标；若不一致（极少见），请优先保留该合金核心性能所在的那个环境。
+4. **清理与去重**：
+   - 移除所有原始数据中的 "source" 标签。
+   - 确保 `overpotential` 列表中没有重复的电流密度点。
+   - 确保 `supplementary_performance` 列表中的 key 不重复。
+
+# Constraints
+- **严禁虚构**：若两方均为 null，则结果为 null。
+- **原文保留**：对于文本描述（如制备方法、衰减细节），保持 verbatim（原文）提取，剔除冗余的 latex 格式，但保持专业术语准确,不需要翻译成中文，尊重原文。
+- **仅输出 JSON**：不要任何前导说明或术语解释。
+
+# Output Schema (Strict JSON)
+{
+  "extraction_results": [
+    {
+      "alloy_id": "Raw ID",
+      "experimental_conditions": {
+        "electrolyte": {
+          "electrolyte_composition": "Electrolyte composition (e.g., 'KOH') or null",
+          "concentration_molar": "Concentration (e.g., '1.0 M') or null",
+          "ph_value": "pH value (e.g., '14.0') or null"
+        },
+        "test_setup": {
+          "substrate": "Substrate material (e.g., 'Nickel Foam') or null",
+          "ir_compensation": "iR compensation (e.g., '95%') or null",
+          "scan_rate": "Scan rate (e.g., '5 mV s^-1') or null"
+        },
+        "synthesis_method": {
+          "method": "Synthesis method (e.g., 'Pulsed electrodeposition') or null",
+          "key_parameters": "Key parameters (e.g., '2023 K, 0.55 s') or null"
+        },
+        "other_environmental_params": [
+          { "key": "Special condition name", "value": "Content" }
+        ]
+      },
+      "performance": {
+        "overpotential": [
+          {
+            "value": "Value",
+            "unit": "mV",
+            "current_density": "Associated current density (e.g., '10 mA cm^-2')",
+          }
+        ],
+        "tafel_slope": {
+          "value": "Value",
+          "unit": "mV dec^-1",
+        },
+        "stability": {
+          "test_method": "Chronopotentiometry / CV Cycling / Unknown",
+          "duration_hours": "Duration (e.g., '50')",
+          "cycle_count": "Cycle number or null",
+          "performance_retention": "Retention (e.g., '98%')",
+          "degradation_details": "Degradation description (e.g., '5 mV shift')",
+        },
+        "supplementary_performance": [
+          { "key": "Other performance metric", "value": "Value and unit" }
+        ]
+      }
+    }
+  ]
+}
+
+---
+### 待仲裁原始数据：
+{
+  "alloy_id": "Cr-Mn-Fe-Co-Ni",
+  "text": {
+    "alloy_id": "Cr-Mn-Fe-Co-Ni",
+    "performance": {
+      "stability": {
+        "source": [
+          "The electrode surface stabilities, i.e., evaluations of ORR durability, were investigated by applying square-wave PC-loading between 0.6 and 1.0 V every 3 s in an ${ \\bf O } _ { 2 }$ saturated solution at $2 5 ^ { \\circ } \\mathbf { C } ^ { 5 2 }$ , as shown in the inset of Fig. 3b. Carbon monoxide (CO) stripping voltammetry was conducted to estimate the effective ECSAs of the sample surfaces prepared using the same vacuum-synthesis procedure as for $\\mathrm { P t / C r / \\mathrm { M n / F e - C o - N i / P t ( h k l ) } }$ and $\\mathsf { P t / C o / P t ( h k l ) }$ . "
+        ],
+        "cycle_count": 5000,
+        "test_method": "Chronopotentiometry",
+        "duration_hours": null,
+        "degradation_details": null,
+        "performance_retention": null
+      },
+      "tafel_slope": {
+        "unit": null,
+        "value": null,
+        "source": []
+      },
+      "overpotential": [],
+      "supplementary_performance": [
+        {
+          "key": "Φ value",
+          "value": "28",
+          "source": [
+            "The values of $\\Phi$ in Cr-Mn-Fe-Co-Ni (Cantor alloy) and in the equi-atomic ratio Pt-Cr-Mn-Fe-Co-Ni are 28 and \\~11.5, respectively, as listed in Table 1. "
+          ]
+        }
+      ]
+    },
+    "experimental_conditions": {
+      "test_setup": {
+        "source": [
+          "RHE). A scan rate of $0 . 0 5 \\mathrm { V } / \\mathsf { s }$ was used to acquire the CV curves in the potential range of $0 . 0 5 { \\scriptstyle - 1 . 0 \\ V }$ without sample-disc rotation until the CV shape was stabilised (approximately \\~10 cycles). "
+        ],
+        "scan_rate": "0.05 V s^-1",
+        "substrate": "Pt(hkl)",
+        "ir_compensation": null
+      },
+      "electrolyte": {
+        "source": [
+          "\nThe ORR properties of $\\mathrm { P t / C r { \\cdot } M n { \\cdot } F e { \\cdot } C o { \\cdot } N i / P t ( h k l ) }$ surfaces were evaluated using the electrochemical surface state during the potential cycles (PCs) at $0 . 6 { - } 1 . 0 \\mathrm { V }$ vs. reversible hydrogen electrode (RHE) in an ${ \\bf O } _ { 2 }$ saturated $0 . 1 \\mathsf { M H C l O } _ { 4 }$ solution at $2 5 ^ { \\circ } \\mathrm { C } .$ . ",
+          "To maintain the atomic arrangements of the UHV-fabricated sample surfaces, the first CV curves were collected by immersing the sample working electrodes (sample surfaces) in $\\Nu _ { 2 }$ -purged 0.1 M $\\mathrm { H C l O } _ { 4 }$ under holding a constant potential of $\\phantom { - } 0 . 0 8  { \\mathsf { V } }$ vs. "
+        ],
+        "ph_value": null,
+        "concentration_molar": "0.1 M",
+        "electrolyte_composition": "HClO4"
+      },
+      "synthesis_method": {
+        "method": "Atomic plasma deposition (APD) / arc-plasma deposition",
+        "source": [
+          "High-purity metal or alloy rods were used as the APD source targets. The Cr-Mn-Fe-Co-Ni layer in this study was synthesised from a custom-made target $( > 9 9 . 9 \\%$ overall purity; atomic ratio of $\\mathbf { C r \\mathbf { \\cdot M n } \\mathbf { \\cdot F e } \\mathbf { \\cdot C o } \\mathbf { \\cdot N i } = 1 . 0 \\mathbf { : 1 . 0 } \\mathbf { : 1 . 0 } \\mathbf { : 1 . 0 } \\mathbf { : 1 . 0 } \\mathbf { : 1 . 0 } ) }$ (Toshima Manufacturing Co., Ltd., Material System Division), which was sintered by mixing Cr, Mn, Fe, Co and Ni in equal composition ratios. ",
+          "\n# Vacuum synthesis procedure\n\nThe $\\sf P t ( h k l )$ $( \\mathbf { h } \\mathbf { k } \\mathbf { l } = \\mathbf { 1 } \\mathbf { 1 } 1$ , 110, 100 | MaTeck; $\\Phi ^ { = } 1 0 \\mathrm { m m }$ , $t { = } 1 \\mathsf { m m }$ , ${ \\bf < 0 . 1 ^ { \\circ } }$ miscut) crystal surfaces were cleaned using repeated $\\mathbf { A } \\mathbf { r } ^ { + }$ sputtering and annealing at 1273 K under UHV. Pt, Cr-Mn-Fe-Co-Ni, Mn-Fe-Co-Ni and/or Co were arc-plasma-deposited on Pt(hkl) at a bias arc voltage of $7 0 \\mathrm { v }$ and pulse frequency of $_ { 2 \\mathsf { H z } }$ . ",
+          "Following a 10 ML-thick Cantor alloy constituent was deposited on the cleaned surface of Pt(hkl) at $3 0 0 \\mathsf { K }$ , the samples were annealed under UHV at 773 K for $3 0 \\mathrm { { m i n } }$ . "
+        ],
+        "key_parameters": "70 V bias arc voltage, 2 Hz pulse frequency, deposition at 300 K, annealed at 773 K for 30 min under UHV"
+      },
+      "other_environmental_params": []
+    }
+  },
+  "table": {
+    "alloy_id": "Cr-Mn-Fe-Co-Ni",
+    "performance": {
+      "stability": {
+        "cycle_count": null,
+        "test_method": "Unknown",
+        "duration_hours": null,
+        "degradation_details": null,
+        "performance_retention": null
+      },
+      "tafel_slope": {
+        "unit": "mV dec^-1",
+        "value": null
+      },
+      "overpotential": [],
+      "supplementary_performance": [
+        {
+          "key": "Sc",
+          "value": "13.4 J mol-1 K-1"
+        },
+        {
+          "key": "△Hmix",
+          "value": "-4160 Jmol-1"
+        },
+        {
+          "key": "Tm",
+          "value": "1791 K"
+        },
+        {
+          "key": "SE",
+          "value": "-0.047 J mol-1 K-1"
+        },
+        {
+          "key": "Φ",
+          "value": "28.04"
+        }
+      ]
+    },
+    "experimental_conditions": {
+      "test_setup": {
+        "scan_rate": null,
+        "substrate": null,
+        "ir_compensation": null
+      },
+      "electrolyte": {
+        "ph_value": null,
+        "concentration_molar": null,
+        "electrolyte_composition": null
+      },
+      "synthesis_method": {
+        "method": null,
+        "key_parameters": null
+      },
+      "other_environmental_params": []
+    },
+    "source": {
+      "location": "Table 1 | Values of $\\Phi$ and consisting parameters of the equi-atomic Cr-Mn-Fe-Co-Ni (Cantor alloy) and Pt-Cr-Mn-Fe-Co-Ni alloy ",
+      "source_content": "<table><tr><td>HEA (equi-atomic ratio)</td><td>Sc (J mol-1 K-1)</td><td>△Hmix (Jmol-1)</td><td>Tm (K)</td><td>SE (J mol-1 K-1)</td><td>Φ</td></tr><tr><td>Cr-Mn-Fe-Co-Ni</td><td>13.4</td><td>-4160</td><td>1791</td><td>-0.047</td><td>28.04</td></tr><tr><td>Pt-Cr-Mn-Fe-Co-Ni</td><td>14.9</td><td>-11444</td><td>1833</td><td>-0.091</td><td>11.49</td></tr></table>",
+      "reference_text_list": [
+        "The values of $\\Phi$ in Cr-Mn-Fe-Co-Ni (Cantor alloy) and in the equi-atomic ratio Pt-Cr-Mn-Fe-Co-Ni are 28 and \\~11.5, respectively, as listed in Table 1."
+      ]
+    }
+  }
+}

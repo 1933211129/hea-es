@@ -1,0 +1,1397 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HEA Performance Visualization</title>
+    
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 引入 Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    
+    <!-- 引入 Axios -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+    <!-- 引入 Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <!-- 引入 KaTeX for LaTeX rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        /* 自定义滚动条 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        .paper-card-enter-active,
+        .paper-card-leave-active {
+            transition: all 0.3s ease;
+        }
+        .paper-card-enter-from,
+        .paper-card-leave-to {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        .list-enter-active,
+        .list-leave-active {
+            transition: all 0.3s ease;
+        }
+        .list-enter-from,
+        .list-leave-to {
+            opacity: 0;
+            transform: translateX(-20px);
+        }
+        
+        /* 玻璃拟态效果 */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        /* 渐变文字 */
+        .text-gradient {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        [v-cloak] { display: none; }
+        
+        /* KaTeX 样式优化 */
+        .latex-content .katex {
+            font-size: 1em;
+        }
+        .latex-content .katex-display {
+            margin: 0.5em 0;
+        }
+        .latex-content .katex-formula {
+            white-space: nowrap;
+        }
+
+        /* Modal 动画 */
+        .modal-enter-active, .modal-leave-active {
+            transition: opacity 0.3s ease;
+        }
+        .modal-enter-from, .modal-leave-to {
+            opacity: 0;
+        }
+
+        /* 原始 HTML 表格样式优化 */
+        .raw-html-table table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 0.75rem;
+            line-height: 1.2;
+        }
+        .raw-html-table th, .raw-html-table td {
+            border: 1px solid #e2e8f0;
+            padding: 6px 8px;
+            text-align: left;
+            vertical-align: top;
+        }
+        .raw-html-table th {
+            background-color: #f8fafc;
+            font-weight: 600;
+            color: #475569;
+        }
+        .raw-html-table tr:nth-child(even) {
+            background-color: #fcfcfc;
+        }
+    </style>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="text-slate-800 h-screen overflow-hidden flex">
+
+    <div id="app" class="w-full h-full flex" v-cloak>
+        
+        <!-- 左侧侧边栏：论文列表 -->
+        <aside class="w-96 bg-white border-r border-slate-200 flex flex-col h-full shadow-lg z-10 flex-shrink-0">
+            <!-- 侧边栏头部 -->
+            <div class="p-5 border-b border-slate-100">
+                <div class="flex items-center gap-3 mb-4">
+                    <h1 class="font-bold text-lg tracking-tight text-slate-800">性能抽取展示</h1>
+                </div>
+                
+                <!-- 搜索框 -->
+                <div class="relative group">
+                    <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors"></i>
+                    <input 
+                        type="text" 
+                        v-model="searchQuery" 
+                        @input="debounceSearch"
+                        placeholder="Search identifiers or titles..." 
+                        class="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-slate-400"
+                    >
+                    <div v-if="loadingList" class="absolute right-3 top-1/2 -translate-y-1/2">
+                        <i class="ph ph-spinner animate-spin text-indigo-500"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 列表区域 -->
+            <div class="flex-1 overflow-y-auto p-3 space-y-1">
+                <div v-if="papers.length === 0 && !loadingList" class="text-center py-10 text-slate-400">
+                    <i class="ph ph-files text-3xl mb-2"></i>
+                    <p class="text-sm">No papers found</p>
+                </div>
+
+                <div 
+                    v-for="paper in papers" 
+                    :key="paper.identifier"
+                    @click="selectPaper(paper.identifier)"
+                    class="group p-3 rounded-lg cursor-pointer transition-all duration-200 border border-transparent hover:bg-slate-50"
+                    :class="{'bg-indigo-50 border-indigo-100 shadow-sm ring-1 ring-indigo-200': selectedId === paper.identifier}"
+                >
+                    <div class="flex justify-between items-start gap-2 mb-1">
+                        <span 
+                            class="font-mono text-xs px-1.5 py-0.5 rounded text-slate-500 bg-slate-100 group-hover:bg-white transition-colors"
+                            :class="{'bg-indigo-100 text-indigo-700 font-medium': selectedId === paper.identifier}"
+                        >
+                            {{ paper.identifier }}
+                        </span>
+                        <i v-if="selectedId === paper.identifier" class="ph ph-caret-right text-indigo-500"></i>
+                    </div>
+                    <h3 
+                        class="text-sm font-medium text-slate-700 leading-snug line-clamp-2 group-hover:text-indigo-600 transition-colors"
+                        :class="{'text-indigo-900': selectedId === paper.identifier}"
+                    >
+                        {{ paper.title || 'Untitled Paper' }}
+                    </h3>
+                </div>
+            </div>
+            
+            <!-- 底部状态栏 -->
+            <div class="p-3 border-t border-slate-100 text-xs text-slate-400 flex justify-between items-center bg-slate-50">
+                <span>{{ papers.length }} papers loaded</span>
+                <div class="flex items-center gap-1.5">
+                    <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+                    <span>API Connected</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 右侧主内容区 -->
+        <main class="flex-1 bg-slate-50 h-full overflow-hidden flex flex-col relative">
+            <!-- 顶部装饰背景 -->
+            <div class="absolute top-0 left-0 w-full h-64 bg-gradient-to-b from-indigo-50/50 to-transparent pointer-events-none"></div>
+
+            <div v-if="selectedPaper" class="flex-1 overflow-y-auto p-8 relative z-0">
+                <!-- 论文头部信息 -->
+                <div class="max-w-6xl mx-auto space-y-6 mb-8">
+                    <div class="flex items-center gap-3 mb-2">
+                        <span class="font-mono text-sm px-2 py-1 rounded-md bg-white border border-slate-200 text-slate-500 shadow-sm">
+                            {{ selectedPaper.identifier }}
+                        </span>
+                        <span class="px-2 py-1 rounded-md bg-indigo-50 text-indigo-700 text-xs font-medium border border-indigo-100">
+                            Research Paper
+                        </span>
+                    </div>
+                    
+                    <h1 class="text-3xl font-bold text-slate-900 leading-tight tracking-tight">
+                        {{ selectedPaper.title }}
+                    </h1>
+                </div>
+
+                <!-- 性能数据部分 (新版：按 alloy_id 展示 merge_result) -->
+                <div class="max-w-6xl mx-auto mb-8">
+                    <div class="flex items-center gap-3 mb-6">
+                        <i class="ph ph-chart-polar text-2xl text-indigo-600"></i>
+                        <h2 class="text-xl font-bold text-slate-800">Performance Metrics</h2>
+                        <div class="h-px bg-slate-200 flex-1"></div>
+                    </div>
+
+                    <div class="pb-10 min-h-[300px]">
+                        <!-- Loading State -->
+                        <div v-if="!performanceData" class="flex flex-col items-center justify-center py-10 text-slate-400">
+                             <i class="ph ph-circle-notch animate-spin text-3xl mb-2 text-indigo-400"></i>
+                             <p>Loading performance data...</p>
+                        </div>
+
+                        <!-- Alloy cards -->
+                        <div v-else>
+                            <div v-if="alloyResults.length === 0" class="bg-white rounded-xl border border-dashed border-slate-200 p-8 text-center text-slate-400">
+                                No performance data found.
+                            </div>
+
+                            <div v-for="(alloy, idx) in alloyResults" :key="idx" class="bg-white rounded-xl border border-slate-200 shadow-sm mb-6 overflow-hidden">
+                                <div class="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                                    <div class="flex items-center gap-3 flex-wrap">
+        <span class="font-mono text-sm px-2 py-1 rounded bg-indigo-50 text-indigo-700 border border-indigo-100">Alloy</span>
+        <span class="text-lg font-bold text-slate-900">{{ alloy.alloy_id || 'Unknown Alloy' }}</span>
+        <div class="flex items-center gap-2">
+            <span class="px-2 py-1 rounded-full text-xs font-semibold" :class="evidenceBadgeClass('text')">
+                Text {{ getEvidenceSummary(alloy).text }}
+            </span>
+            <span class="px-2 py-1 rounded-full text-xs font-semibold" :class="evidenceBadgeClass('table')">
+                Table {{ getEvidenceSummary(alloy).table }}
+            </span>
+            <span class="px-2 py-1 rounded-full text-xs font-semibold" :class="evidenceBadgeClass('figure')">
+                Figure {{ getEvidenceSummary(alloy).figure }}
+            </span>
+        </div>
+    </div>
+                                    <div class="text-xs text-slate-500">#{{ idx + 1 }}</div>
+                                </div>
+
+                                <div class="p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                    <!-- Experimental Conditions -->
+                                    <div>
+                                        <h3 class="text-sm font-semibold text-slate-600 mb-3 flex items-center gap-2">
+                                            <i class="ph ph-flask text-indigo-500"></i> Experimental Conditions
+                                        </h3>
+                                        <div class="space-y-4">
+                                            <div class="border border-slate-200 rounded-lg p-4">
+                                                <div class="text-xs font-semibold text-slate-500 uppercase mb-2 flex items-center gap-1">
+                                                    <i class="ph ph-flask text-amber-500"></i> Electrolyte
+                                                </div>
+                                                <div class="text-sm text-slate-800 space-y-1">
+                                                    <div>Composition: {{ alloy.experimental_conditions?.electrolyte?.electrolyte_composition || '—' }}</div>
+                                                    <div>Concentration: {{ alloy.experimental_conditions?.electrolyte?.concentration_molar || '—' }}</div>
+                                                    <div>pH: {{ alloy.experimental_conditions?.electrolyte?.ph_value ?? '—' }}</div>
+                                                </div>
+                                                <details v-if="isTableSource(alloy.experimental_conditions?.electrolyte?.source) || normalizeSource(alloy.experimental_conditions?.electrolyte?.source).length" class="mt-2 text-xs">
+                                                    <summary class="cursor-pointer text-indigo-600 hover:underline">Sources</summary>
+                                                    <div class="mt-1 space-y-2 text-slate-700" v-if="isTableSource(alloy.experimental_conditions?.electrolyte?.source)">
+                                                        <div v-if="getTableLocation(alloy.experimental_conditions?.electrolyte?.source)" class="text-sm font-mono bg-slate-50 px-2 py-1 rounded border border-slate-200">
+                                                            {{ getTableLocation(alloy.experimental_conditions?.electrolyte?.source) }}
+                                                        </div>
+                                                        <div v-if="getTableRefs(alloy.experimental_conditions?.electrolyte?.source).length" class="space-y-1">
+                                                            <div class="text-slate-500 text-xs uppercase tracking-wide">References</div>
+                                                            <ul class="list-disc list-inside space-y-1">
+                                                                <li v-for="(r, i) in getTableRefs(alloy.experimental_conditions?.electrolyte?.source)" :key="i" class="bg-slate-50 border border-slate-200 rounded px-2 py-1">{{ r }}</li>
+                                                            </ul>
+                                                        </div>
+                                                        <div v-if="getTableHtml(alloy.experimental_conditions?.electrolyte?.source)" class="bg-white border border-slate-200 rounded p-2 overflow-x-auto raw-html-table" v-html="getTableHtml(alloy.experimental_conditions?.electrolyte?.source)"></div>
+                                                    </div>
+                                                    <ul v-else class="mt-1 space-y-1 text-slate-600">
+                                                        <li v-for="(s, i) in normalizeSource(alloy.experimental_conditions?.electrolyte?.source)" :key="i" class="bg-slate-50 border border-slate-200 rounded px-2 py-1">{{ s }}</li>
+                                                    </ul>
+                                                </details>
+                                            </div>
+
+                                            <div class="border border-slate-200 rounded-lg p-4">
+                                                <div class="text-xs font-semibold text-slate-500 uppercase mb-2 flex items-center gap-1">
+                                                    <i class="ph ph-gear text-sky-500"></i> Test Setup
+                                                </div>
+                                                <div class="text-sm text-slate-800 space-y-1">
+                                                    <div>Substrate: {{ alloy.experimental_conditions?.test_setup?.substrate || '—' }}</div>
+                                                    <div>Scan Rate: {{ alloy.experimental_conditions?.test_setup?.scan_rate || '—' }}</div>
+                                                    <div>IR Compensation: {{ alloy.experimental_conditions?.test_setup?.ir_compensation ?? '—' }}</div>
+                                                </div>
+                                                <details v-if="isTableSource(alloy.experimental_conditions?.test_setup?.source) || normalizeSource(alloy.experimental_conditions?.test_setup?.source).length" class="mt-2 text-xs">
+                                                    <summary class="cursor-pointer text-indigo-600 hover:underline">Sources</summary>
+                                                    <div class="mt-1 space-y-2 text-slate-700" v-if="isTableSource(alloy.experimental_conditions?.test_setup?.source)">
+                                                        <div v-if="getTableLocation(alloy.experimental_conditions?.test_setup?.source)" class="text-sm font-mono bg-slate-50 px-2 py-1 rounded border border-slate-200">
+                                                            {{ getTableLocation(alloy.experimental_conditions?.test_setup?.source) }}
+                                                        </div>
+                                                        <div v-if="getTableRefs(alloy.experimental_conditions?.test_setup?.source).length" class="space-y-1">
+                                                            <div class="text-slate-500 text-xs uppercase tracking-wide">References</div>
+                                                            <ul class="list-disc list-inside space-y-1">
+                                                                <li v-for="(r, i) in getTableRefs(alloy.experimental_conditions?.test_setup?.source)" :key="i" class="bg-slate-50 border border-slate-200 rounded px-2 py-1">{{ r }}</li>
+                                                            </ul>
+                                                        </div>
+                                                        <div v-if="getTableHtml(alloy.experimental_conditions?.test_setup?.source)" class="bg-white border border-slate-200 rounded p-2 overflow-x-auto raw-html-table" v-html="getTableHtml(alloy.experimental_conditions?.test_setup?.source)"></div>
+                                                    </div>
+                                                    <ul v-else class="mt-1 space-y-1 text-slate-600">
+                                                        <li v-for="(s, i) in normalizeSource(alloy.experimental_conditions?.test_setup?.source)" :key="i" class="bg-slate-50 border border-slate-200 rounded px-2 py-1">{{ s }}</li>
+                                                    </ul>
+                                                </details>
+                                            </div>
+
+                                            <div class="border border-slate-200 rounded-lg p-4">
+                                                <div class="text-xs font-semibold text-slate-500 uppercase mb-2 flex items-center gap-1">
+                                                    <i class="ph ph-flask text-emerald-500"></i> Synthesis
+                                                </div>
+                                                <div class="text-sm text-slate-800 space-y-1">
+                                                    <div>Method: {{ alloy.experimental_conditions?.synthesis_method?.method || '—' }}</div>
+                                                    <div>Key Params: {{ alloy.experimental_conditions?.synthesis_method?.key_parameters || '—' }}</div>
+                                                </div>
+                                                <details v-if="isTableSource(alloy.experimental_conditions?.synthesis_method?.source) || normalizeSource(alloy.experimental_conditions?.synthesis_method?.source).length" class="mt-2 text-xs">
+                                                    <summary class="cursor-pointer text-indigo-600 hover:underline">Sources</summary>
+                                                    <div class="mt-1 space-y-2 text-slate-700" v-if="isTableSource(alloy.experimental_conditions?.synthesis_method?.source)">
+                                                        <div v-if="getTableLocation(alloy.experimental_conditions?.synthesis_method?.source)" class="text-sm font-mono bg-slate-50 px-2 py-1 rounded border border-slate-200">
+                                                            {{ getTableLocation(alloy.experimental_conditions?.synthesis_method?.source) }}
+                                                        </div>
+                                                        <div v-if="getTableRefs(alloy.experimental_conditions?.synthesis_method?.source).length" class="space-y-1">
+                                                            <div class="text-slate-500 text-xs uppercase tracking-wide">References</div>
+                                                            <ul class="list-disc list-inside space-y-1">
+                                                                <li v-for="(r, i) in getTableRefs(alloy.experimental_conditions?.synthesis_method?.source)" :key="i" class="bg-slate-50 border border-slate-200 rounded px-2 py-1">{{ r }}</li>
+                                                            </ul>
+                                                        </div>
+                                                        <div v-if="getTableHtml(alloy.experimental_conditions?.synthesis_method?.source)" class="bg-white border border-slate-200 rounded p-2 overflow-x-auto raw-html-table" v-html="getTableHtml(alloy.experimental_conditions?.synthesis_method?.source)"></div>
+                                                    </div>
+                                                    <ul v-else class="mt-1 space-y-1 text-slate-600">
+                                                        <li v-for="(s, i) in normalizeSource(alloy.experimental_conditions?.synthesis_method?.source)" :key="i" class="bg-slate-50 border border-slate-200 rounded px-2 py-1">{{ s }}</li>
+                                                    </ul>
+                                                </details>
+                                            </div>
+
+                                            <div class="border border-slate-200 rounded-lg p-4">
+                                                <div class="text-xs font-semibold text-slate-500 uppercase mb-2 flex items-center gap-1">
+                                                    <i class="ph ph-list text-purple-500"></i> Other Params
+                                                </div>
+                                                <div v-if="(alloy.experimental_conditions?.other_environmental_params || []).length === 0" class="text-sm text-slate-400">None</div>
+                                                <div v-else class="space-y-2">
+                                                    <div v-for="(param, i) in alloy.experimental_conditions?.other_environmental_params || []" :key="i" class="p-2 rounded border border-slate-200 bg-slate-50">
+                                                        <div class="text-sm font-semibold text-slate-800">{{ param.key || '—' }}</div>
+                                                        <div class="text-sm text-slate-700">{{ param.value || '—' }}</div>
+                                                        <details v-if="isTableSource(param.source) || normalizeSource(param.source).length" class="mt-2 text-xs">
+                                                            <summary class="cursor-pointer text-indigo-600 hover:underline">Sources</summary>
+                                                            <div class="mt-1 space-y-2 text-slate-700" v-if="isTableSource(param.source)">
+                                                                <div v-if="getTableLocation(param.source)" class="text-sm font-mono bg-slate-50 px-2 py-1 rounded border border-slate-200">
+                                                                    {{ getTableLocation(param.source) }}
+                                                                </div>
+                                                                <div v-if="getTableRefs(param.source).length" class="space-y-1">
+                                                                    <div class="text-slate-500 text-xs uppercase tracking-wide">References</div>
+                                                                    <ul class="list-disc list-inside space-y-1">
+                                                                        <li v-for="(r, j) in getTableRefs(param.source)" :key="j" class="bg-slate-50 border border-slate-200 rounded px-2 py-1">{{ r }}</li>
+                                                                    </ul>
+                                                                </div>
+                                                                <div v-if="getTableHtml(param.source)" class="bg-white border border-slate-200 rounded p-2 overflow-x-auto raw-html-table" v-html="getTableHtml(param.source)"></div>
+                                                            </div>
+                                                            <ul v-else class="mt-1 space-y-1 text-slate-600">
+                                                                <li v-for="(s, j) in normalizeSource(param.source)" :key="j" class="bg-slate-50 border border-slate-200 rounded px-2 py-1">{{ s }}</li>
+                                                            </ul>
+                                                        </details>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Performance -->
+                                    <div>
+                                        <h3 class="text-sm font-semibold text-slate-600 mb-3 flex items-center gap-2">
+                                            <i class="ph ph-lightning text-indigo-500"></i> Performance
+                                        </h3>
+                                        <div class="space-y-4">
+                                            <div class="border border-slate-200 rounded-lg p-4">
+                                                <div class="text-xs font-semibold text-slate-500 uppercase mb-2 flex items-center gap-1">
+                                                    <i class="ph ph-lightning text-amber-500"></i> Overpotential
+                                                </div>
+                                                <div v-if="(alloy.performance?.overpotential || []).length === 0" class="text-sm text-slate-400">None</div>
+                                                <div v-else class="space-y-2">
+                                                    <div v-for="(op, i) in alloy.performance?.overpotential || []" :key="i" class="p-2 rounded border border-slate-200 bg-slate-50">
+                                                        <div class="text-sm font-semibold text-slate-800">
+                                                            {{ op.value || '—' }} {{ op.unit || '' }}
+                                                            <span v-if="op.current_density" class="text-xs text-slate-500 ml-2">(@ {{ op.current_density }})</span>
+                                                        </div>
+                                                        <details v-if="isTableSource(op.source)" class="mt-2 text-xs">
+                                                            <summary class="cursor-pointer text-indigo-600 hover:underline">
+                                                                Table Source
+                                                            </summary>
+                                                            <div class="mt-1 space-y-2 text-slate-700">
+                                                                <div v-if="getTableLocation(op.source)" class="text-sm font-mono bg-slate-50 px-2 py-1 rounded border border-slate-200">
+                                                                    {{ getTableLocation(op.source) }}
+                                                                </div>
+                                                                <div v-if="getTableRefs(op.source).length" class="space-y-1">
+                                                                    <div class="text-slate-500 text-xs uppercase tracking-wide">References</div>
+                                                                    <ul class="list-disc list-inside space-y-1">
+                                                                        <li v-for="(r, j) in getTableRefs(op.source)" :key="j" class="bg-slate-50 border border-slate-200 rounded px-2 py-1">{{ r }}</li>
+                                                                    </ul>
+                                                                </div>
+                                                                <div v-if="getTableHtml(op.source)" class="bg-white border border-slate-200 rounded p-2 overflow-x-auto raw-html-table" v-html="getTableHtml(op.source)"></div>
+                                                            </div>
+                                                        </details>
+                                                        <details v-else-if="normalizeSource(op.source).length" class="mt-2 text-xs">
+                                                            <summary class="cursor-pointer text-indigo-600 hover:underline">Sources ({{ normalizeSource(op.source).length }})</summary>
+                                                            <ul class="mt-1 space-y-1 text-slate-600">
+                                                                <li v-for="(s, j) in normalizeSource(op.source)" :key="j" class="bg-slate-50 border border-slate-200 rounded px-2 py-1">{{ s }}</li>
+                                                            </ul>
+                                                        </details>
+                                                        <details v-if="isFigureSource(op.figure_source)" class="mt-2 text-xs">
+                                                            <summary class="cursor-pointer text-amber-600 hover:underline flex items-center gap-1">
+                                                                <i class="ph ph-image"></i><span>Figure Source</span>
+                                                            </summary>
+                                                            <div class="mt-1 space-y-2 text-slate-700">
+                                                                <div class="text-sm font-mono bg-slate-50 px-2 py-1 rounded border border-slate-200" v-if="op.figure_source.location">
+                                                                    {{ op.figure_source.location }}
+                                                                </div>
+                                                                <div v-if="getFigureRefs(op.figure_source).length" class="space-y-1">
+                                                                    <div class="text-slate-500 text-xs uppercase tracking-wide">References</div>
+                                                                    <ul class="list-disc list-inside space-y-1">
+                                                                        <li v-for="(r, j) in getFigureRefs(op.figure_source)" :key="j" class="bg-slate-50 border border-slate-200 rounded px-2 py-1">{{ r }}</li>
+                                                                    </ul>
+                                                                </div>
+                                                                <div v-if="op.figure_source.img_path" class="border border-slate-200 rounded-lg overflow-hidden bg-slate-50 p-2">
+                                                                    <img 
+                                                                        :src="getImageUrl(op.figure_source.img_path)" 
+                                                                        alt="Extracted Figure" 
+                                                                        class="max-w-full h-auto object-contain max-h-[400px] mx-auto rounded"
+                                                                        @error="(e) => e.target.style.display = 'none'"
+                                                                    >
+                                                                    <div class="text-xs text-slate-400 font-mono mt-2 text-center break-all px-2 select-all">{{ op.figure_source.img_path }}</div>
+                                                                </div>
+                                                            </div>
+                                                        </details>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="border border-slate-200 rounded-lg p-4" v-if="alloy.performance?.tafel_slope !== null">
+                                                <div class="text-xs font-semibold text-slate-500 uppercase mb-2 flex items-center gap-1">
+                                                    <i class="ph ph-trend-up text-emerald-500"></i> Tafel Slope
+                                                </div>
+                                                <div class="text-sm font-semibold text-slate-800">
+                                                    {{ alloy.performance?.tafel_slope?.value || '—' }} {{ alloy.performance?.tafel_slope?.unit || '' }}
+                                                </div>
+                                                <details v-if="isTableSource(alloy.performance?.tafel_slope?.source) || normalizeSource(alloy.performance?.tafel_slope?.source).length" class="mt-2 text-xs">
+                                                    <summary class="cursor-pointer text-indigo-600 hover:underline">Sources</summary>
+                                                    <div class="mt-1 space-y-2 text-slate-700" v-if="isTableSource(alloy.performance?.tafel_slope?.source)">
+                                                        <div v-if="getTableLocation(alloy.performance?.tafel_slope?.source)" class="text-sm font-mono bg-slate-50 px-2 py-1 rounded border border-slate-200">
+                                                            {{ getTableLocation(alloy.performance?.tafel_slope?.source) }}
+                                                        </div>
+                                                        <div v-if="getTableRefs(alloy.performance?.tafel_slope?.source).length" class="space-y-1">
+                                                            <div class="text-slate-500 text-xs uppercase tracking-wide">References</div>
+                                                            <ul class="list-disc list-inside space-y-1">
+                                                                <li v-for="(r, i) in getTableRefs(alloy.performance?.tafel_slope?.source)" :key="i" class="bg-slate-50 border border-slate-200 rounded px-2 py-1">{{ r }}</li>
+                                                            </ul>
+                                                        </div>
+                                                        <div v-if="getTableHtml(alloy.performance?.tafel_slope?.source)" class="bg-white border border-slate-200 rounded p-2 overflow-x-auto raw-html-table" v-html="getTableHtml(alloy.performance?.tafel_slope?.source)"></div>
+                                                    </div>
+                                                    <ul v-else class="mt-1 space-y-1 text-slate-600">
+                                                        <li v-for="(s, i) in normalizeSource(alloy.performance?.tafel_slope?.source)" :key="i" class="bg-slate-50 border border-slate-200 rounded px-2 py-1">{{ s }}</li>
+                                                    </ul>
+                                                </details>
+                                            </div>
+
+                                            <div class="border border-slate-200 rounded-lg p-4">
+                                                <div class="text-xs font-semibold text-slate-500 uppercase mb-2 flex items-center gap-1">
+                                                    <i class="ph ph-timer text-rose-500"></i> Stability
+                                                </div>
+                                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-slate-800">
+                                                    <div>Cycle Count: {{ alloy.performance?.stability?.cycle_count ?? '—' }}</div>
+                                                    <div>Method: {{ alloy.performance?.stability?.test_method || '—' }}</div>
+                                                    <div>Duration: {{ alloy.performance?.stability?.duration_hours ?? '—' }}</div>
+                                                    <div>Retention: {{ alloy.performance?.stability?.performance_retention ?? '—' }}</div>
+                                                    <div class="sm:col-span-2">Degradation: {{ alloy.performance?.stability?.degradation_details || '—' }}</div>
+                                                </div>
+                                                <details v-if="isTableSource(alloy.performance?.stability?.source) || normalizeSource(alloy.performance?.stability?.source).length" class="mt-2 text-xs">
+                                                    <summary class="cursor-pointer text-indigo-600 hover:underline">Sources</summary>
+                                                    <div class="mt-1 space-y-2 text-slate-700" v-if="isTableSource(alloy.performance?.stability?.source)">
+                                                        <div v-if="getTableLocation(alloy.performance?.stability?.source)" class="text-sm font-mono bg-slate-50 px-2 py-1 rounded border border-slate-200">
+                                                            {{ getTableLocation(alloy.performance?.stability?.source) }}
+                                                        </div>
+                                                        <div v-if="getTableRefs(alloy.performance?.stability?.source).length" class="space-y-1">
+                                                            <div class="text-slate-500 text-xs uppercase tracking-wide">References</div>
+                                                            <ul class="list-disc list-inside space-y-1">
+                                                                <li v-for="(r, i) in getTableRefs(alloy.performance?.stability?.source)" :key="i" class="bg-slate-50 border border-slate-200 rounded px-2 py-1">{{ r }}</li>
+                                                            </ul>
+                                                        </div>
+                                                        <div v-if="getTableHtml(alloy.performance?.stability?.source)" class="bg-white border border-slate-200 rounded p-2 overflow-x-auto raw-html-table" v-html="getTableHtml(alloy.performance?.stability?.source)"></div>
+                                                    </div>
+                                                    <ul v-else class="mt-1 space-y-1 text-slate-600">
+                                                        <li v-for="(s, i) in normalizeSource(alloy.performance?.stability?.source)" :key="i" class="bg-slate-50 border border-slate-200 rounded px-2 py-1">{{ s }}</li>
+                                                    </ul>
+                                                </details>
+                                            </div>
+
+                                            <div class="border border-slate-200 rounded-lg p-4">
+                                                <div class="text-xs font-semibold text-slate-500 uppercase mb-2 flex items-center gap-1">
+                                                    <i class="ph ph-list-bullets text-blue-500"></i> Supplementary Performance
+                                                </div>
+                                                <div v-if="(alloy.performance?.supplementary_performance || []).length === 0" class="text-sm text-slate-400">None</div>
+                                                <div v-else class="space-y-2">
+                                                    <div v-for="(sp, i) in alloy.performance?.supplementary_performance || []" :key="i" class="p-2 rounded border border-slate-200 bg-slate-50">
+                                                        <div class="text-sm font-semibold text-slate-800">{{ sp.key || '—' }}</div>
+                                                        <div class="text-sm text-slate-700">{{ sp.value || '—' }}</div>
+                                                        <details v-if="isTableSource(sp.source) || normalizeSource(sp.source).length" class="mt-2 text-xs">
+                                                            <summary class="cursor-pointer text-indigo-600 hover:underline">Sources</summary>
+                                                            <div class="mt-1 space-y-2 text-slate-700" v-if="isTableSource(sp.source)">
+                                                                <div v-if="getTableLocation(sp.source)" class="text-sm font-mono bg-slate-50 px-2 py-1 rounded border border-slate-200">
+                                                                    {{ getTableLocation(sp.source) }}
+                                                                </div>
+                                                                <div v-if="getTableRefs(sp.source).length" class="space-y-1">
+                                                                    <div class="text-slate-500 text-xs uppercase tracking-wide">References</div>
+                                                                    <ul class="list-disc list-inside space-y-1">
+                                                                        <li v-for="(r, j) in getTableRefs(sp.source)" :key="j" class="bg-slate-50 border border-slate-200 rounded px-2 py-1">{{ r }}</li>
+                                                                    </ul>
+                                                                </div>
+                                                                <div v-if="getTableHtml(sp.source)" class="bg-white border border-slate-200 rounded p-2 overflow-x-auto raw-html-table" v-html="getTableHtml(sp.source)"></div>
+                                                            </div>
+                                                            <ul v-else class="mt-1 space-y-1 text-slate-600">
+                                                                <li v-for="(s, j) in normalizeSource(sp.source)" :key="j" class="bg-slate-50 border border-slate-200 rounded px-2 py-1">{{ s }}</li>
+                                                            </ul>
+                                                        </details>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 研究概览卡片 (Research Object & Topic) -->
+                <div class="max-w-6xl mx-auto space-y-6 mb-8">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                            <div class="flex items-center gap-2 mb-3 text-slate-400">
+                                <i class="ph ph-flask text-lg text-indigo-500"></i>
+                                <span class="text-xs font-semibold uppercase tracking-wider">Alloy Elements</span>
+                            </div>
+                            <div v-if="formattedAlloyElements" class="flex flex-wrap gap-2">
+                                <div 
+                                    v-for="(element, index) in formattedAlloyElements" 
+                                    :key="index"
+                                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 transition-colors"
+                                >
+                                    <span class="font-mono font-semibold text-indigo-700 text-sm">{{ element.symbol }}</span>
+                                    <span v-if="element.ratio !== null && element.ratio !== undefined" class="text-xs text-indigo-500 font-medium">
+                                        {{ element.ratio }}
+                                    </span>
+                                </div>
+                            </div>
+                            <div v-else class="text-slate-400 text-sm">N/A</div>
+                        </div>
+                        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                            <div class="flex items-center gap-2 mb-3 text-slate-400">
+                                <i class="ph ph-lightbulb text-lg text-amber-500"></i>
+                                <span class="text-xs font-semibold uppercase tracking-wider">Research Topic</span>
+                            </div>
+                            <div 
+                                class="text-slate-700 text-sm leading-relaxed latex-content"
+                                v-html="renderLatex(selectedPaper.topic || 'No topic summary available.')"
+                            ></div>
+                        </div>
+                    </div>
+
+                    <!-- 摘要 -->
+                    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                        <div class="flex items-center justify-between mb-4 cursor-pointer" @click="toggleAbstract">
+                            <div class="flex items-center gap-2 text-slate-400">
+                                <i class="ph ph-article text-lg text-slate-600"></i>
+                                <span class="text-xs font-semibold uppercase tracking-wider">Abstract</span>
+                            </div>
+                            <i class="ph ph-caret-down text-slate-400 transition-transform duration-300" :class="{'rotate-180': showAbstract}"></i>
+                        </div>
+                        <transition name="list">
+                            <div 
+                                v-if="showAbstract" 
+                                class="text-slate-600 leading-relaxed text-sm text-justify latex-content"
+                                v-html="renderLatex(selectedPaper.abstract || 'No abstract available.')"
+                            ></div>
+                        </transition>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 空状态：未选择论文 -->
+            <div v-else class="flex-1 flex flex-col items-center justify-center text-slate-400 h-full">
+                <div v-if="loadingDetail" class="flex flex-col items-center">
+                    <i class="ph ph-circle-notch animate-spin text-4xl text-indigo-500 mb-4"></i>
+                    <p class="text-slate-500 animate-pulse">Loading paper details...</p>
+                </div>
+                <div v-else class="text-center p-8 max-w-md">
+                    <div class="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6 text-slate-300">
+                        <i class="ph ph-cursor-click text-4xl"></i>
+                    </div>
+                    <h2 class="text-xl font-bold text-slate-700 mb-2">选择文章</h2>
+                    <p class="text-slate-500">从侧边栏选择文章，查看其详细分析和性能指标。</p>
+                </div>
+            </div>
+
+            <!-- 证据详情弹窗 (Modal) -->
+            <transition name="modal">
+                <div v-if="showEvidenceModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <!-- 背景遮罩 -->
+                    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="showEvidenceModal = false"></div>
+                    
+                    <!-- 弹窗内容 -->
+                    <div class="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[85vh] flex flex-col relative z-10 animate-scale-up">
+                        <!-- 头部 -->
+                        <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 rounded-t-2xl">
+                            <div>
+                                <h3 class="text-lg font-bold text-slate-800">{{ currentEvidenceType }} Evidence</h3>
+                                <div v-if="currentEvidenceItem" class="mt-1">
+                                    <span v-if="currentEvidenceType !== 'Stability'" class="inline-block bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded text-sm font-mono font-medium">
+                                        Value: {{ currentEvidenceItem.value }}
+                                    </span>
+                                </div>
+                            </div>
+                            <button @click="showEvidenceModal = false" class="text-slate-400 hover:text-slate-600 p-2 rounded-full hover:bg-slate-100 transition-colors">
+                                <i class="ph ph-x text-xl"></i>
+                            </button>
+                        </div>
+
+                        <!-- 内容区域 -->
+                        <div class="p-6 overflow-y-auto space-y-4 bg-slate-50/30 flex-1">
+                            <div v-if="currentEvidenceItem" v-for="(source, index) in currentEvidenceItem.sources" :key="index" class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
+                                <div class="flex items-center justify-between mb-3 border-b border-slate-50 pb-3">
+                                    <div class="flex items-center gap-2">
+                                        <span 
+                                            class="px-2 py-1 rounded text-xs font-bold uppercase tracking-wider border"
+                                            :class="getSourceBadgeClass(source.source)"
+                                        >
+                                            {{ source.source }} Source
+                                        </span>
+                                        <!-- 显示具体的 Location 信息 (Table/Figure Caption) -->
+                                        <span v-if="source.source === 'table' && source.data.location" class="text-xs text-slate-500 font-mono bg-slate-50 px-2 py-0.5 rounded truncate max-w-[200px]" :title="source.data.location">
+                                            {{ source.data.location }}
+                                        </span>
+                                        <span v-if="source.source === 'figure' && source.data.location" class="text-xs text-slate-500 font-mono bg-slate-50 px-2 py-0.5 rounded truncate max-w-[200px]" :title="source.data.location">
+                                            {{ source.data.location }}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div class="space-y-3 text-sm">
+                                    
+                                    <!-- 1. 文本来源 -->
+                                    <div v-if="source.source === 'text'">
+                                        
+                                        <!-- Overpotential 特有 -->
+                                        <div v-if="currentEvidenceType === 'Overpotential' && source.metric" class="flex gap-4">
+                                            <div class="text-slate-400 font-medium w-24 flex-shrink-0">Conditions:</div>
+                                            <div class="text-slate-700 font-mono bg-slate-50 px-2 rounded">{{ source.metric.condition_current_density || 'N/A' }}</div>
+                                        </div>
+                                        
+                                        <!-- Overpotential Source Text -->
+                                        <div v-if="currentEvidenceType === 'Overpotential'" class="mt-2">
+                                            <div v-if="source.metric && source.metric.source_chunk_id" class="flex gap-4">
+                                                <div class="text-slate-400 font-medium w-24 flex-shrink-0">Source Text:</div>
+                                                <div class="text-slate-600 font-serif italic bg-slate-50 p-2 rounded border border-slate-100 flex-1 latex-content" v-html="renderLatexWithHighlight(source.metric.source_chunk_id, extractNumbersFromValue(currentEvidenceItem.value))"></div>
+                                            </div>
+                                            <div v-else-if="source.data && source.data.source_chunk_id" class="flex gap-4">
+                                                <div class="text-slate-400 font-medium w-24 flex-shrink-0">Source Text:</div>
+                                                <div class="text-slate-600 font-serif italic bg-slate-50 p-2 rounded border border-slate-100 flex-1 latex-content" v-html="renderLatexWithHighlight(source.data.source_chunk_id, extractNumbersFromValue(currentEvidenceItem.value))"></div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Tafel Source Text -->
+                                        <div v-else-if="currentEvidenceType === 'Tafel Slope' && source.data && source.data.tafel_value_source" class="flex gap-4 mt-2">
+                                            <div class="text-slate-400 font-medium w-24 flex-shrink-0">Source Text:</div>
+                                            <div class="text-slate-600 font-serif italic bg-slate-50 p-2 rounded border border-slate-100 flex-1 latex-content" v-html="renderLatexWithHighlight(source.data.tafel_value_source, extractNumbersFromValue(currentEvidenceItem.value))"></div>
+                                        </div>
+
+                                        <!-- Stability Text Evidence -->
+                                        <div v-else-if="currentEvidenceType === 'Stability'">
+                                            <div class="grid grid-cols-1 gap-3">
+                                                <template v-for="field in stabilityFields" :key="field.key">
+                                                    <div v-if="source.data[field.key] || source.data[field.sourceKey]">
+                                                        <div class="text-xs font-semibold text-slate-500 uppercase">{{ field.label }}</div>
+                                                        <div class="flex flex-col gap-1 ml-2">
+                                                            <!-- Value -->
+                                                            <div v-if="source.data[field.key]" class="flex gap-2">
+                                                                <span class="text-slate-400 text-xs">Val:</span>
+                                                                <span class="text-sm font-medium text-slate-800">{{ source.data[field.key] }}</span>
+                                                            </div>
+                                                            <!-- Source Text -->
+                                                            <div v-if="source.data[field.sourceKey]" class="flex gap-2 items-start">
+                                                                <span class="text-slate-400 text-xs mt-1">Src:</span>
+                                                                <div class="text-xs text-slate-600 font-serif italic bg-slate-50 p-1.5 rounded border border-slate-100 latex-content flex-1" v-html="renderLatexWithHighlight(source.data[field.sourceKey], source.data[field.key])"></div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
+
+                                        <div v-if="currentEvidenceType !== 'Stability'" class="flex gap-4 mt-2">
+                                            <div class="text-slate-400 font-medium w-24 flex-shrink-0">Extracted:</div>
+                                            <div class="text-slate-800 font-semibold bg-green-50 text-green-700 px-2 rounded inline-block">{{ currentEvidenceItem.value }}</div>
+                                        </div>
+                                    </div>
+
+                                    <!-- 2. 表格来源 -->
+                                    <div v-if="source.source === 'table'">
+                                        <!-- Stability Extracted Values in Table -->
+                                        <div v-if="currentEvidenceType === 'Stability'" class="mb-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                            <div class="text-xs font-semibold text-slate-400 uppercase mb-2">Extracted Values</div>
+                                            <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                                                <template v-for="field in stabilityFields" :key="field.key">
+                                                    <div v-if="source.data[field.key]">
+                                                        <span class="text-slate-500">{{ field.label }}:</span>
+                                                        <span class="text-slate-800 font-medium ml-1">{{ source.data[field.key] }}</span>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
+
+                                        <div v-if="source.data.source_content" class="flex gap-4">
+                                            <div class="text-slate-400 font-medium w-24 flex-shrink-0">Row Content:</div>
+                                            <div class="text-slate-600 font-mono text-xs bg-slate-50 p-2 rounded border border-slate-100 overflow-x-auto raw-html-table" v-html="highlightTableContent(source.data.source_content, source)">
+                                            </div>
+                                        </div>
+                                        <div v-if="source.data.reference_text_list && source.data.reference_text_list.length" class="mt-3">
+                                            <div class="text-slate-400 font-medium mb-1 text-xs uppercase tracking-wide">Context References</div>
+                                            <ul class="list-disc list-inside text-slate-600 space-y-1 bg-slate-50 p-3 rounded-lg border border-slate-100 text-xs">
+                                                <li v-for="(ref, i) in source.data.reference_text_list" :key="i" class="latex-content" v-html="renderLatexWithHighlight(ref, getHighlightValuesForSource(source))"></li>
+                                            </ul>
+                                        </div>
+                                    </div>
+
+                                    <!-- 3. 图片来源 -->
+                                    <div v-if="source.source === 'figure'">
+                                        <!-- Stability Extracted Values in Figure -->
+                                        <div v-if="currentEvidenceType === 'Stability'" class="mb-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                            <div class="text-xs font-semibold text-slate-400 uppercase mb-2">Extracted Values</div>
+                                            <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                                                <template v-for="field in stabilityFields" :key="field.key">
+                                                    <div v-if="source.data[field.key]">
+                                                        <span class="text-slate-500">{{ field.label }}:</span>
+                                                        <span class="text-slate-800 font-medium ml-1">{{ source.data[field.key] }}</span>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
+
+                                        <div v-if="source.data.img_path" class="mt-3">
+                                            <div class="text-slate-400 font-medium mb-2 text-xs uppercase tracking-wide">Evidence Image</div>
+                                            <div class="border border-slate-200 rounded-lg overflow-hidden bg-slate-50 p-2">
+                                                <img 
+                                                    :src="getImageUrl(source.data.img_path)" 
+                                                    alt="Extracted Figure" 
+                                                    class="max-w-full h-auto object-contain max-h-[400px] mx-auto rounded"
+                                                    @error="(e) => e.target.style.display = 'none'"
+                                                >
+                                                <div class="text-xs text-slate-400 font-mono mt-2 text-center break-all px-2 select-all">{{ source.data.img_path }}</div>
+                                            </div>
+                                        </div>
+                                         <div v-if="source.data.reference_text_list && source.data.reference_text_list.length" class="mt-3">
+                                            <div class="text-slate-400 font-medium mb-1 text-xs uppercase tracking-wide">Context References</div>
+                                            <ul class="list-disc list-inside text-slate-600 space-y-1 bg-slate-50 p-3 rounded-lg border border-slate-100 text-xs">
+                                                <li v-for="(ref, i) in source.data.reference_text_list" :key="i" class="latex-content" v-html="renderLatexWithHighlight(ref, getHighlightValuesForSource(source))"></li>
+                                            </ul>
+                                        </div>
+                                    </div>
+
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </transition>
+
+        </main>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+        // 配置 API 基础地址 - 假设 API 运行在本地 8003 端口
+        const API_BASE_URL = 'http://localhost:8003';
+
+        createApp({
+            data() {
+                return {
+                    papers: [],
+                    searchQuery: '',
+                    selectedId: null,
+                    selectedPaper: null,
+                    performanceData: null, // merge_result 数据
+                    loadingList: false,
+                    loadingDetail: false,
+                    showAbstract: true,
+                    searchTimeout: null,
+                    
+                    // 弹窗状态
+                    showEvidenceModal: false,
+                    currentEvidenceItem: null,
+                    currentEvidenceType: '',
+                    
+                    // Stability 字段映射
+                    stabilityFields: [
+                        { key: 'cycle_count', sourceKey: 'cycle_count_source', label: 'Cycle Count' },
+                        { key: 'test_method', sourceKey: 'test_method_source', label: 'Test Method' },
+                        { key: 'duration_hours', sourceKey: 'duration_hours_source', label: 'Duration (h)' },
+                        { key: 'performance_retention', sourceKey: 'performance_retention_source', label: 'Retention' },
+                        { key: 'degradation_details', sourceKey: 'degradation_details_source', label: 'Degradation' }
+                    ]
+                }
+            },
+            computed: {
+                formattedAlloyElements() {
+                    if (!this.selectedPaper || !this.selectedPaper.alloy_elements) return null;
+                    
+                    try {
+                        let alloyData = this.selectedPaper.alloy_elements;
+                        if (typeof alloyData === 'string') {
+                            alloyData = JSON.parse(alloyData);
+                        }
+                        
+                        if (alloyData && alloyData.elements && Array.isArray(alloyData.elements)) {
+                            return alloyData.elements.map(el => ({
+                                symbol: el.symbol || '',
+                                ratio: el.ratio !== null && el.ratio !== undefined ? String(el.ratio) : null
+                            }));
+                        }
+                        
+                        return null;
+                    } catch (error) {
+                        console.error('Error parsing alloy_elements:', error);
+                        return null;
+                    }
+                },
+                alloyResults() {
+                    // 优先使用 /performance 返回的 merge_result
+                    if (this.performanceData) {
+                        if (this.performanceData.extraction_results) {
+                            return this.performanceData.extraction_results;
+                        }
+                        if (this.performanceData.merge_result && this.performanceData.merge_result.extraction_results) {
+                            return this.performanceData.merge_result.extraction_results;
+                        }
+                    }
+                    // 退回 paper detail 中的 performance（也来自 merge_result）
+                    if (this.selectedPaper && this.selectedPaper.performance && this.selectedPaper.performance.extraction_results) {
+                        return this.selectedPaper.performance.extraction_results;
+                    }
+                    return [];
+                }
+            },
+            methods: {
+                async fetchPapers() {
+                    this.loadingList = true;
+                    try {
+                        const response = await axios.get(`${API_BASE_URL}/papers`);
+                        this.papers = response.data;
+                    } catch (error) {
+                        console.error('Error fetching papers:', error);
+                        alert('Failed to load papers. Please ensure the backend API is running.');
+                    } finally {
+                        this.loadingList = false;
+                    }
+                },
+                debounceSearch() {
+                    if (this.searchTimeout) clearTimeout(this.searchTimeout);
+                    this.searchTimeout = setTimeout(() => {
+                        this.searchPapers();
+                    }, 500); 
+                },
+                async searchPapers() {
+                    if (!this.searchQuery.trim()) {
+                        return this.fetchPapers();
+                    }
+                    
+                    this.loadingList = true;
+                    try {
+                        const response = await axios.get(`${API_BASE_URL}/papers/search`, {
+                            params: { q: this.searchQuery }
+                        });
+                        this.papers = response.data;
+                    } catch (error) {
+                        console.error('Error searching papers:', error);
+                    } finally {
+                        this.loadingList = false;
+                    }
+                },
+                async selectPaper(identifier) {
+                    if (this.selectedId === identifier) return;
+                    
+                    this.selectedId = identifier;
+                    this.selectedPaper = null;
+                    this.performanceData = null; // 重置性能数据
+                    this.loadingDetail = true;
+                    
+                    try {
+                        // 并行请求：获取元数据和性能数据
+                        const [detailRes, perfRes] = await Promise.all([
+                            axios.get(`${API_BASE_URL}/papers/${identifier}`),
+                            axios.get(`${API_BASE_URL}/papers/${identifier}/performance`)
+                        ]);
+
+                        this.selectedPaper = detailRes.data;
+                        // 性能数据优先取 /performance 接口的 merge_result
+                        const perf = perfRes.data;
+                        this.performanceData = (perf && typeof perf === 'object' && perf.merge_result !== undefined)
+                            ? (perf.merge_result || {})
+                            : (perf || {});
+                        this.showAbstract = true;
+                        
+                        this.$nextTick(() => {
+                            this.renderLatexInElement();
+                        });
+                    } catch (error) {
+                        console.error('Error fetching paper detail:', error);
+                        alert('Failed to load paper details.');
+                    } finally {
+                        this.loadingDetail = false;
+                    }
+                },
+                toggleAbstract() {
+                    this.showAbstract = !this.showAbstract;
+                    if (this.showAbstract) {
+                        this.$nextTick(() => {
+                            this.renderLatexInElement();
+                        });
+                    }
+                },
+                
+                // --- 新增：source 归一化 ---
+                normalizeSource(src) {
+                    if (!src) return [];
+                    // 如果是列表
+                    if (Array.isArray(src)) {
+                        return src.map(v => typeof v === 'string' ? v : JSON.stringify(v));
+                    }
+                    // 如果是对象且包含 table_source 或 reference_text_list
+                    if (typeof src === 'object') {
+                        const arr = [];
+                        if (src.reference_text_list && Array.isArray(src.reference_text_list)) {
+                            arr.push(...src.reference_text_list);
+                        }
+                        if (src.table_source) {
+                            const t = src.table_source;
+                            const loc = t.location ? `Table: ${t.location}` : 'Table source';
+                            arr.push(loc);
+                        }
+                        return arr;
+                    }
+                    // 其他类型，转字符串
+                    return [String(src)];
+                },
+
+                // 判断表格来源
+                isTableSource(src) {
+                    return src && typeof src === 'object' && !Array.isArray(src) && (src.table_source || src.reference_text_list || src.source_content);
+                },
+                // 判断图片来源
+                isFigureSource(src) {
+                    return src && typeof src === 'object' && src.img_path;
+                },
+                // 表格辅助
+                getTableRefs(src) {
+                    if (!src || typeof src !== 'object') return [];
+                    if (src.table_source && Array.isArray(src.table_source.reference_text_list)) return src.table_source.reference_text_list;
+                    if (Array.isArray(src.reference_text_list)) return src.reference_text_list;
+                    return [];
+                },
+                getTableLocation(src) {
+                    if (!src || typeof src !== 'object') return '';
+                    if (src.table_source && src.table_source.location) return src.table_source.location;
+                    return src.location || '';
+                },
+                getTableHtml(src) {
+                    if (!src || typeof src !== 'object') return '';
+                    if (src.table_source && src.table_source.source_content) return src.table_source.source_content;
+                    return src.source_content || '';
+                },
+                // 图片辅助
+                getFigureRefs(fig) {
+                    if (!fig || typeof fig !== 'object') return [];
+                    if (Array.isArray(fig.reference_text_list)) return fig.reference_text_list;
+                    return [];
+                },
+                // 证据计数徽章
+                evidenceBadgeClass(type) {
+                    const map = {
+                        text: 'bg-emerald-50 text-emerald-700 border border-emerald-100',
+                        table: 'bg-sky-50 text-sky-700 border border-sky-100',
+                        figure: 'bg-amber-50 text-amber-700 border border-amber-100'
+                    };
+                    return map[type] || 'bg-slate-100 text-slate-600';
+                },
+                getEvidenceSummary(alloy) {
+                    const acc = { text: 0, table: 0, figure: 0 };
+                    const visit = (node) => {
+                        if (!node) return;
+                        if (Array.isArray(node)) {
+                            node.forEach(visit);
+                            return;
+                        }
+                        if (typeof node === 'object') {
+                            if (node.figure_source && typeof node.figure_source === 'object') {
+                                acc.figure += 1;
+                                visit(node.figure_source);
+                            }
+                            if (node.source !== undefined) {
+                                const s = node.source;
+                                if (Array.isArray(s)) {
+                                    acc.text += 1;
+                                } else if (s && typeof s === 'object') {
+                                    if (s.table_source || s.source_content) acc.table += 1;
+                                    else acc.text += 1;
+                                    visit(s);
+                                }
+                            }
+                            if (node.table_source) acc.table += 1;
+                            Object.values(node).forEach(visit);
+                        }
+                    };
+                    visit(alloy);
+                    return acc;
+                },
+
+                // --- LaTeX 渲染逻辑 (保持原样) ---
+                normalizeLatex(latexText) {
+                    if (!latexText) return '';
+                    let normalized = String(latexText);
+                    let changed = true;
+                    while (changed) {
+                        const before = normalized;
+                        normalized = normalized.replace(/\\mathrm\s*\{\s*\{\s*([^}]+)\s*\}\s*\}/g, '\\mathrm{$1}');
+                        normalized = normalized.replace(/\\text\s*\{\s*\{\s*([^}]+)\s*\}\s*\}/g, '\\text{$1}');
+                        normalized = normalized.replace(/\\mathit\s*\{\s*\{\s*([^}]+)\s*\}\s*\}/g, '\\mathit{$1}');
+                        normalized = normalized.replace(/\\mathbf\s*\{\s*\{\s*([^}]+)\s*\}\s*\}/g, '\\mathbf{$1}');
+                        changed = (before !== normalized);
+                    }
+                    changed = true;
+                    while (changed) {
+                        const before = normalized;
+                        normalized = normalized.replace(/(\d)\s+(\d)/g, '$1$2');
+                        changed = (before !== normalized);
+                    }
+                    normalized = normalized.replace(/\\mathrm\s*\{\s*([^}]+)\s*\}/g, (match, content) => {
+                        const cleaned = content.replace(/\s+/g, '');
+                        return `\\mathrm{${cleaned}}`;
+                    });
+                    normalized = normalized.replace(/\\text\s*\{\s*([^}]+)\s*\}/g, (match, content) => {
+                        const cleaned = content.replace(/\s+/g, '');
+                        return `\\text{${cleaned}}`;
+                    });
+                    normalized = normalized.replace(/\\mathit\s*\{\s*([^}]+)\s*\}/g, (match, content) => {
+                        const cleaned = content.replace(/\s+/g, '');
+                        return `\\mathit{${cleaned}}`;
+                    });
+                    normalized = normalized.replace(/\\mathbf\s*\{\s*([^}]+)\s*\}/g, (match, content) => {
+                        const cleaned = content.replace(/\s+/g, '');
+                        return `\\mathbf{${cleaned}}`;
+                    });
+                    normalized = normalized.replace(/\^\s*\{\s*([^}]+)\s*\}/g, (match, content) => {
+                        const cleaned = content.replace(/\s+/g, '');
+                        return `^{${cleaned}}`;
+                    });
+                    normalized = normalized.replace(/_\s*\{\s*([^}]+)\s*\}/g, (match, content) => {
+                        const cleaned = content.replace(/\s+/g, '');
+                        return `_{${cleaned}}`;
+                    });
+                    normalized = normalized.replace(/\\mathrm\{([^}]+)\}\s*\\mathrm\{([^}]+)\}/g, '\\mathrm{$1}\\,\\mathrm{$2}');
+                    normalized = normalized.replace(/\{\s*([a-zA-Z\s]+)\s*\}/g, (match, content) => {
+                        if (!content.includes('\\') && !content.includes('^') && !content.includes('_')) {
+                            const cleaned = content.replace(/\s+/g, '');
+                            return `{${cleaned}}`;
+                        }
+                        return match;
+                    });
+                    normalized = normalized.trim().replace(/^[,\s]+/, '').replace(/[,\s]+$/, '');
+                    return normalized;
+                },
+                renderLatex(text) {
+                    if (!text) return '';
+                    let normalizedText = String(text);
+                    const dollarRegex = /\$([^$]+)\$/g;
+                    let match;
+                    const formulas = [];
+                    let formulaIndex = 0;
+                    const formulaPlaceholder = '___KATEX_FORMULA___';
+                    while ((match = dollarRegex.exec(text)) !== null) {
+                        const formulaContent = match[1];
+                        const normalizedFormula = this.normalizeLatex(formulaContent);
+                        formulas.push(`$${normalizedFormula}$`);
+                        normalizedText = normalizedText.replace(match[0], `${formulaPlaceholder}${formulaIndex}${formulaPlaceholder}`);
+                        formulaIndex++;
+                    }
+                    if (normalizedText.includes('\\')) {
+                        const parts = normalizedText.split(new RegExp(`(${formulaPlaceholder}\\d+${formulaPlaceholder})`, 'g'));
+                        const processedParts = parts.map(part => {
+                            if (part.match(new RegExp(`${formulaPlaceholder}\\d+${formulaPlaceholder}`))) {
+                                return part;
+                            }
+                            if (part.includes('\\')) {
+                                return this.normalizeLatex(part);
+                            }
+                            return part;
+                        });
+                        normalizedText = processedParts.join('');
+                    }
+                    const escapeHtml = (str) => {
+                        const div = document.createElement('div');
+                        div.textContent = str;
+                        return div.innerHTML;
+                    };
+                    let html = escapeHtml(normalizedText);
+                    formulas.forEach((formula, index) => {
+                        html = html.replace(`${formulaPlaceholder}${index}${formulaPlaceholder}`, formula);
+                    });
+                    return html;
+                },
+                // 表格高亮函数（参考表格字符匹配.html）
+                highlightFullTableSimple(htmlContent, targetValue) {
+                    if (!targetValue || !htmlContent) {
+                        return htmlContent || '';
+                    }
+                    // 转义目标值中的特殊正则字符
+                    const escapedTarget = String(targetValue).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    // 创建全局匹配正则
+                    const regex = new RegExp(escapedTarget, 'g');
+                    // 定义高亮模板（红色背景，白色文字）
+                    const highlightTemplate = `<span style="background-color: #ff0000; color: white; font-weight: bold; padding: 0 2px;">$&</span>`;
+                    // 全局替换
+                    return htmlContent.replace(regex, highlightTemplate);
+                },
+                // 文本模糊高亮函数（参考文本字符匹配.html）
+                fuzzyHighlight(rawText, targetValue, windowBuffer = 15, highlightRange = 35) {
+                    // 预处理目标值：去掉空格
+                    const cleanTarget = String(targetValue).replace(/\s+/g, '');
+                    if (!cleanTarget || !rawText) return rawText || '';
+                    
+                    let bestStart = -1;
+                    let bestEnd = -1;
+                    
+                    // 搜索逻辑
+                    for (let i = 0; i < rawText.length; i++) {
+                        // 如果首字母匹配
+                        if (rawText[i] === cleanTarget[0]) {
+                            let matchCount = 0;
+                            let tempIdx = i;
+                            let matchedIndices = [];
+                            
+                            for (let char of cleanTarget) {
+                                let found = false;
+                                let searchLimit = tempIdx + windowBuffer;
+                                
+                                while (tempIdx < rawText.length && tempIdx < searchLimit) {
+                                    if (rawText[tempIdx] === char) {
+                                        matchCount++;
+                                        matchedIndices.push(tempIdx);
+                                        found = true;
+                                        tempIdx++;
+                                        break;
+                                    }
+                                    tempIdx++;
+                                }
+                                if (!found) break;
+                            }
+                            
+                            // 校验是否完全匹配
+                            if (matchCount === cleanTarget.length) {
+                                const charSpanStart = matchedIndices[0];
+                                const charSpanEnd = matchedIndices[matchedIndices.length - 1] + 1;
+                                const matchCenter = Math.floor((charSpanStart + charSpanEnd) / 2);
+                                
+                                const half = Math.floor(highlightRange / 2);
+                                bestStart = Math.max(0, matchCenter - half);
+                                bestEnd = Math.min(rawText.length, matchCenter + (highlightRange - half));
+                                break; // 找到第一个匹配项就停止
+                            }
+                        }
+                    }
+                    
+                    // 构建高亮结果
+                    if (bestStart !== -1) {
+                        const before = rawText.substring(0, bestStart);
+                        const middle = rawText.substring(bestStart, bestEnd);
+                        const after = rawText.substring(bestEnd);
+                        
+                        return before + `<span style="background-color: #ff0000; color: white; font-weight: bold; padding: 0 2px;">${middle}</span>` + after;
+                    } else {
+                        return rawText; // 未找到匹配项，返回原文
+                    }
+                },
+                // 渲染LaTeX并高亮值
+                renderLatexWithHighlight(text, valuesToHighlight) {
+                    if (!text) return '';
+                    
+                    // 如果没有要高亮的值，直接渲染LaTeX
+                    if (!valuesToHighlight) {
+                        return this.renderLatex(text);
+                    }
+                    
+                    const values = Array.isArray(valuesToHighlight) ? valuesToHighlight : [valuesToHighlight];
+                    const validValues = values.filter(v => v !== null && v !== undefined && v !== '' && String(v).trim() !== '');
+                    
+                    if (validValues.length === 0) {
+                        return this.renderLatex(text);
+                    }
+                    
+                    // 先在原始文本上做模糊匹配，找到所有匹配位置
+                    const originalText = String(text);
+                    const matches = [];
+                    
+                    validValues.forEach(value => {
+                        const valueStr = String(value).trim();
+                        if (!valueStr) return;
+                        
+                        // 使用模糊匹配找到位置
+                        const cleanTarget = valueStr.replace(/\s+/g, '');
+                        let bestStart = -1;
+                        let bestEnd = -1;
+                        
+                        // 搜索逻辑（与 fuzzyHighlight 相同）
+                        for (let i = 0; i < originalText.length; i++) {
+                            if (originalText[i] === cleanTarget[0]) {
+                                let matchCount = 0;
+                                let tempIdx = i;
+                                let matchedIndices = [];
+                                
+                                for (let char of cleanTarget) {
+                                    let found = false;
+                                    let searchLimit = tempIdx + 15; // windowBuffer = 15
+                                    
+                                    while (tempIdx < originalText.length && tempIdx < searchLimit) {
+                                        if (originalText[tempIdx] === char) {
+                                            matchCount++;
+                                            matchedIndices.push(tempIdx);
+                                            found = true;
+                                            tempIdx++;
+                                            break;
+                                        }
+                                        tempIdx++;
+                                    }
+                                    if (!found) break;
+                                }
+                                
+                                if (matchCount === cleanTarget.length) {
+                                    const charSpanStart = matchedIndices[0];
+                                    const charSpanEnd = matchedIndices[matchedIndices.length - 1] + 1;
+                                    const matchCenter = Math.floor((charSpanStart + charSpanEnd) / 2);
+                                    
+                                    const half = Math.floor(35 / 2); // highlightRange = 35
+                                    bestStart = Math.max(0, matchCenter - half);
+                                    bestEnd = Math.min(originalText.length, matchCenter + (35 - half));
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if (bestStart !== -1) {
+                            matches.push({ start: bestStart, end: bestEnd });
+                        }
+                    });
+                    
+                    // 如果没有匹配，直接渲染LaTeX
+                    if (matches.length === 0) {
+                        return this.renderLatex(text);
+                    }
+                    
+                    // 合并重叠的匹配区间
+                    matches.sort((a, b) => a.start - b.start);
+                    const mergedMatches = [];
+                    let currentMatch = matches[0];
+                    
+                    for (let i = 1; i < matches.length; i++) {
+                        if (matches[i].start <= currentMatch.end) {
+                            // 重叠，合并
+                            currentMatch.end = Math.max(currentMatch.end, matches[i].end);
+                        } else {
+                            // 不重叠，保存当前，开始新的
+                            mergedMatches.push(currentMatch);
+                            currentMatch = matches[i];
+                        }
+                    }
+                    mergedMatches.push(currentMatch);
+                    
+                    // 使用特殊标记在原始文本中标记高亮区域（避免被HTML转义）
+                    const highlightStartMarker = '___HIGHLIGHT_START___';
+                    const highlightEndMarker = '___HIGHLIGHT_END___';
+                    let markedText = originalText;
+                    
+                    // 从后往前插入标记，避免位置偏移
+                    for (let i = mergedMatches.length - 1; i >= 0; i--) {
+                        const match = mergedMatches[i];
+                        const before = markedText.substring(0, match.start);
+                        const middle = markedText.substring(match.start, match.end);
+                        const after = markedText.substring(match.end);
+                        markedText = before + highlightStartMarker + middle + highlightEndMarker + after;
+                    }
+                    
+                    // 渲染LaTeX
+                    let html = this.renderLatex(markedText);
+                    
+                    // 将标记替换为高亮HTML标签
+                    html = html.replace(
+                        new RegExp(highlightStartMarker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([\\s\\S]*?)' + highlightEndMarker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+                        '<span style="background-color: #ff0000; color: white; font-weight: bold; padding: 0 2px;">$1</span>'
+                    );
+                    
+                    return html;
+                },
+                getImageUrl(path) {
+                    if (!path) return '';
+                    const cleanPath = path.startsWith('/') ? path.substring(1) : path;
+                    return `${API_BASE_URL}/static_images/${cleanPath}`;
+                },
+                renderLatexInElement() {
+                    if (typeof renderMathInElement === 'undefined') {
+                        setTimeout(() => this.renderLatexInElement(), 100);
+                        return;
+                    }
+                    this.$nextTick(() => {
+                        const elements = document.querySelectorAll('.latex-content');
+                        elements.forEach(el => {
+                            try {
+                                renderMathInElement(el, {
+                                    delimiters: [
+                                        {left: '$$', right: '$$', display: true},
+                                        {left: '$', right: '$', display: false},
+                                        {left: '\\[', right: '\\]', display: true},
+                                        {left: '\\(', right: '\\)', display: false}
+                                    ],
+                                    throwOnError: false
+                                });
+                            } catch (e) {
+                                console.error('Error rendering LaTeX:', e);
+                            }
+                        });
+                    });
+                },
+            },
+            mounted() {
+                this.fetchPapers();
+                const checkKaTeX = () => {
+                    if (typeof renderMathInElement !== 'undefined') {
+                        if (this.selectedPaper) {
+                            this.$nextTick(() => {
+                                this.renderLatexInElement();
+                            });
+                        }
+                    } else {
+                        setTimeout(checkKaTeX, 100);
+                    }
+                };
+                checkKaTeX();
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

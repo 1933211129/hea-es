@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: #f8fafc;
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* KaTeX 样式优化 */
+.latex-content .katex {
+  font-size: 1em;
+}
+
+.latex-content .katex-display {
+  margin: 0.5em 0;
+}
+
+.latex-content .katex-formula {
+  white-space: nowrap;
+}
+
+/* 原始 HTML 表格样式优化 */
+.raw-html-table table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.75rem;
+  line-height: 1.2;
+}
+
+.raw-html-table th,
+.raw-html-table td {
+  border: 1px solid #e2e8f0;
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.raw-html-table th {
+  background-color: #f8fafc;
+  font-weight: 600;
+  color: #475569;
+}
+
+.raw-html-table tr:nth-child(even) {
+  background-color: #fcfcfc;
+}
+
+[v-cloak] {
+  display: none;
+}
+

@@ -1,0 +1,80 @@
+01
+02
+03
+04
+05
+06
+07
+08
+09
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+performance_vis
+├─ index.html
+├─ tailwind.config.js
+├─ .DS_Store
+├─ performance_vis.html
+├─ vite.config.js
+├─ data.json
+├─ .gitignore
+├─ package-lock.json
+├─ package.json
+├─ INSTALL_VUE_ROUTER.md
+├─ postcss.config.js
+└─ src
+   ├─ App.vue // 根组件
+   ├─ .DS_Store
+   ├─ main.js // 入口文件
+   ├─ style.css
+   ├─ router // 路由
+   │  └─ index.js // 路由配置
+   ├─ views // 视图
+   │  ├─ Home.vue // 首页
+   │  └─ NewTask.vue // 新任务
+   ├─ components
+   │  ├─ SourceModal.vue // 来源信息弹窗
+   │  ├─ FeedbackModal.vue // 反馈信息弹窗
+   │  ├─ SourceDetails.vue // 来源信息详情
+   │  ├─ FigureSourceButton.vue // 图表来源信息按钮
+   │  ├─ AlloyCard.vue // 合金卡片
+   │  ├─ FigureSourceModal.vue // 图表来源信息弹窗
+   │  ├─ ConditionItem.vue // 条件项
+   │  ├─ FigureSourceDetails.vue // 图表来源信息详情
+   │  ├─ PaperList.vue // 论文列表
+   │  ├─ ExperimentalConditions.vue // 实验条件
+   │  ├─ SourceButton.vue // 来源信息按钮
+   │  ├─ PaperDetail.vue // 论文详情
+   │  └─ PerformanceMetrics.vue // 性能指标
+   └─ utils // 工具函数
+      ├─ latex.js // LaTeX 渲染
+      ├─ source.js // 来源信息处理
+      └─ api.js // API 调用

@@ -1,0 +1,84 @@
+# Role
+你是一位精通电催化研究（HER/ORR）的高级数据仲裁专家。你具备极强的数据辨析能力，能对比"文本提取结果"与"表格提取结果"，依据原始证据链产出该合金最精确、最完整的数据记录。
+
+# Task
+请针对目标合金【alloy_id】，对比【Text Data】与【Table Data】两个来源的信息。根据提供的原始证据（source/source_content/reference_text），进行数据对齐、去重、冲突校准及互补合并，生成最终的唯一 JSON。
+
+# Input Data
+- **【Alloy ID】**: {alloy_id}
+- **【Text Data】**: 基于论文正文提取的 JSON 结果，包含原始句子证据。
+- **【Table Data】**: 基于论文表格提取的 JSON 结果，包含 HTML 原文、标题及引用文本。
+
+# Arbitration Logic (仲裁原则)
+1. **数值精度优先 (Precision First)**：
+   - 若文本结果与表格结果描述同一指标但数值精度不同（如 28 vs 28.04），**必须保留高精度数值**。
+2. **描述细节互补 (Detail Complementarity)**：
+   - 文本往往包含更多细节（如 synthesis_method 的具体步骤、稳定性测试的具体循环范围）。
+   - 表格往往包含更整齐的物理常数（如 Φ, Tm, △Hmix 等）。
+   - **操作**：将两者的非空字段取并集。若文本有细节而表格为 null，保留文本细节。
+3. **环境对齐确认**：
+   - 检查【Text Data】和【Table Data】的实验条件（electrolyte, test_setup）。若一致，则合并性能指标；若不一致（极少见），请优先保留该合金核心性能所在的那个环境。
+4. **清理与去重**：
+   - 移除所有原始数据中的 "source" 标签。
+   - 确保 `overpotential` 列表中没有重复的电流密度点。
+   - 确保 `supplementary_performance` 列表中的 key 不重复。
+
+# Constraints
+- **严禁虚构**：若两方均为 null，则结果为 null。
+- **原文保留**：对于文本描述（如制备方法、衰减细节），保持 verbatim（原文）提取，剔除冗余的 latex 格式，但保持专业术语准确,不需要翻译成中文，尊重原文。
+- **仅输出 JSON**：不要任何前导说明或术语解释。
+
+# Output Schema (Strict JSON)
+{{
+  "extraction_results": [
+    {{
+      "alloy_id": "Raw ID",
+      "experimental_conditions": {{
+        "electrolyte": {{
+          "electrolyte_composition": "Electrolyte composition (e.g., 'KOH') or null",
+          "concentration_molar": "Concentration (e.g., '1.0 M') or null",
+          "ph_value": "pH value (e.g., '14.0') or null"
+        }},
+        "test_setup": {{
+          "substrate": "Substrate material (e.g., 'Nickel Foam') or null",
+          "ir_compensation": "iR compensation (e.g., '95%') or null",
+          "scan_rate": "Scan rate (e.g., '5 mV s^-1') or null"
+        }},
+        "synthesis_method": {{
+          "method": "Synthesis method (e.g., 'Pulsed electrodeposition') or null",
+          "key_parameters": "Key parameters (e.g., '2023 K, 0.55 s') or null"
+        }},
+        "other_environmental_params": [
+          {{ "key": "Special condition name", "value": "Content" }}
+        ]
+      }},
+      "performance": {{
+        "overpotential": [
+          {{
+            "value": "Value",
+            "unit": "mV",
+            "current_density": "Associated current density (e.g., '10 mA cm^-2')",
+          }}
+        ],
+        "tafel_slope": {{
+          "value": "Value",
+          "unit": "mV dec^-1",
+        }},
+        "stability": {{
+          "test_method": "Chronopotentiometry / CV Cycling / Unknown",
+          "duration_hours": "Duration (e.g., '50')",
+          "cycle_count": "Cycle number or null",
+          "performance_retention": "Retention (e.g., '98%')",
+          "degradation_details": "Degradation description (e.g., '5 mV shift')",
+        }},
+        "supplementary_performance": [
+          {{ "key": "Other performance metric", "value": "Value and unit" }}
+        ]
+      }}
+    }}
+  ]
+}}
+
+---
+### 待仲裁原始数据：
+{input_data}

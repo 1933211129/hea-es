@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>JS 表格全显高亮测试</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        /* 容器样式 */
+        #table-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow-x: auto; /* 如果表格太宽，支持横向滚动 */
+        }
+        /* 表格基础样式，确保好看 */
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 10px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: center;
+        }
+        th {
+            background-color: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>表格完整显示与高亮</h2>
+    <div id="table-container">
+        </div>
+
+    <script>
+        /**
+         * 表格全显高亮函数 (复刻 Python highlight_full_table_simple 逻辑)
+         * @param {string} htmlContent - 原始表格 HTML 字符串
+         * @param {string} targetValue - 要搜索的值
+         */
+        function highlightFullTableSimple(htmlContent, targetValue) {
+            if (!targetValue || !htmlContent) {
+                return htmlContent || "No Input";
+            }
+
+            // 1. 转义目标值中的特殊正则字符 (类似 re.escape)
+            // 这样如果搜 "2.7" 里的点号就不会匹配任意字符
+            const escapedTarget = targetValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            
+            // 2. 创建全局匹配正则 ('g' 表示替换所有匹配项)
+            const regex = new RegExp(escapedTarget, 'g');
+            
+            // 3. 定义高亮模板 (红底白字)
+            const highlightTemplate = `<span style="background-color: #ff0000; color: white; font-weight: bold; padding: 0 2px;">$&</span>`;
+            
+            // 4. 全局替换：直接对整个 HTML 字符串操作，不切片，不截断
+            // 在 JS 的 replace 中，$& 代表匹配到的原始文本
+            return htmlContent.replace(regex, highlightTemplate);
+        }
+
+        // ==========================================
+        // 配置区域：在 rawTable 中粘贴您的 <table>...</table> 代码
+        // ==========================================
+        
+        const rawTable = `
+        <table>
+            <thead>
+                <tr>
+                    <th>Catalyst</th>
+                    <th>Electrolyte</th>
+                    <th>Current Density</th>
+                    <th>Overpotential (mV)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>RuO2</td>
+                    <td>0.5 M H2SO4</td>
+                    <td>10 mA/cm2</td>
+                    <td>210</td>
+                </tr>
+                <tr>
+                    <td>Test Material</td>
+                    <td>1.0 M KOH</td>
+                    <td>10 mA/cm2</td>
+                    <td>27</td>
+                </tr>
+            </tbody>
+        </table>
+        `;
+
+        const target = "27";
+
+        // 执行处理
+        const finalHTML = highlightFullTableSimple(rawTable, target);
+
+        // 渲染到页面
+        document.getElementById('table-container').innerHTML = finalHTML;
+
+    </script>
+</body>
+</html>

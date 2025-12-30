@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>JS 文本模糊高亮测试</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            line-height: 1.8;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        #container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            white-space: pre-wrap; /* 保持换行 */
+            word-wrap: break-word;
+        }
+        .highlight {
+            color: white; 
+            background-color: red; 
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>模糊高亮结果展示</h2>
+    <div id="container">
+        </div>
+
+    <script>
+        /**
+         * 模糊匹配并高亮结果 (复刻 Python 版逻辑)
+         */
+        function fuzzyHighlight(rawText, targetValue, windowBuffer = 15, highlightRange = 35) {
+            // 1. 预处理目标值：去掉空格
+            const cleanTarget = targetValue.replace(/\s+/g, '');
+            if (!cleanTarget || !rawText) return rawText || "No Input";
+
+            let bestStart = -1;
+            let bestEnd = -1;
+
+            // 2. 搜索逻辑
+            for (let i = 0; i < rawText.length; i++) {
+                // 如果首字母匹配
+                if (rawText[i] === cleanTarget[0]) {
+                    let matchCount = 0;
+                    let tempIdx = i;
+                    let matchedIndices = [];
+
+                    for (let char of cleanTarget) {
+                        let found = false;
+                        let searchLimit = tempIdx + windowBuffer;
+                        
+                        while (tempIdx < rawText.length && tempIdx < searchLimit) {
+                            if (rawText[tempIdx] === char) {
+                                matchCount++;
+                                matchedIndices.push(tempIdx);
+                                found = true;
+                                tempIdx++;
+                                break;
+                            }
+                            tempIdx++;
+                        }
+                        if (!found) break;
+                    }
+
+                    // 校验是否完全匹配
+                    if (matchCount === cleanTarget.length) {
+                        const charSpanStart = matchedIndices[0];
+                        const charSpanEnd = matchedIndices[matchedIndices.length - 1] + 1;
+                        const matchCenter = Math.floor((charSpanStart + charSpanEnd) / 2);
+
+                        const half = Math.floor(highlightRange / 2);
+                        bestStart = Math.max(0, matchCenter - half);
+                        bestEnd = Math.min(rawText.length, matchCenter + (highlightRange - half));
+                        break; // 找到第一个匹配项就停止
+                    }
+                }
+            }
+
+            // 3. 构建高亮结果
+            if (bestStart !== -1) {
+                const before = rawText.substring(0, bestStart);
+                const middle = rawText.substring(bestStart, bestEnd);
+                const after = rawText.substring(bestEnd);
+                
+                return before + `<span class="highlight">${middle}</span>` + after;
+            } else {
+                return `未找到匹配项: ${targetValue}`;
+            }
+        }
+
+        // ==========================================
+        // 配置区域：请在此处填充您的数据
+        // ==========================================
+        
+        const rawContent = `an ultrasmall HEA (us-HEA) nanoparticles NiCoFePtRh with an average diameter of only $1 . 6 8 ~ \\mathrm { { \\ n m } }$ ，which exhibited an excellent HER performance (Figure 1la,b).[62] The us-HEA/C exhibited a small overpotential of $2 7 \\mathrm { m V }$ at a current density of $1 0 \\mathrm { m A c m } ^ { - 2 }$ and a Tafel slope of $3 0 . 1 \\mathrm { m V }$ dec-1 (Figure 1li,j). The us-HEA/C achieved an. ultrahigh mass activity of 28.3 A $\\mathrm { m g } _ { \\mathrm { n o b l e \\ m a t e l } } { } ^ { - 1 }$ at $- 0 . 0 5 \\mathrm { ~ V } ,$ exhibited an excellent TOF of $3 0 . 1 ~ \\mathrm { s } ^ { - 1 }$ at an overpotential of $5 0 ~ \\mathrm { m V } ,$ 41.8 times higher than that of commercial $\\mathrm { P t / C }$ catalyst
+`;
+
+        const target = "27";
+
+        // 执行函数
+        const resultHTML = fuzzyHighlight(rawContent, target);
+
+        // 将结果插入到页面
+        document.getElementById('container').innerHTML = resultHTML;
+
+    </script>
+</body>
+</html>
