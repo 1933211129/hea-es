@@ -818,8 +818,8 @@
 
     <script>
         const { createApp } = Vue;
-        // 配置 API 基础地址 - 假设 API 运行在本地 8003 端口
-        const API_BASE_URL = 'http://localhost:8003';
+        // 使用相对路径，适配 Docker 环境
+        const API_BASE_URL = '';
 
         createApp({
             data() {
@@ -893,7 +893,7 @@
                 async fetchPapers() {
                     this.loadingList = true;
                     try {
-                        const response = await axios.get(`${API_BASE_URL}/papers`);
+                        const response = await axios.get('/papers');
                         this.papers = response.data;
                     } catch (error) {
                         console.error('Error fetching papers:', error);
@@ -915,7 +915,7 @@
                     
                     this.loadingList = true;
                     try {
-                        const response = await axios.get(`${API_BASE_URL}/papers/search`, {
+                        const response = await axios.get('/papers/search', {
                             params: { q: this.searchQuery }
                         });
                         this.papers = response.data;
@@ -936,8 +936,8 @@
                     try {
                         // 并行请求：获取元数据和性能数据
                         const [detailRes, perfRes] = await Promise.all([
-                            axios.get(`${API_BASE_URL}/papers/${identifier}`),
-                            axios.get(`${API_BASE_URL}/papers/${identifier}/performance`)
+                            axios.get(`/papers/${identifier}`),
+                            axios.get(`/papers/${identifier}/performance`)
                         ]);
 
                         this.selectedPaper = detailRes.data;
@@ -1349,7 +1349,8 @@
                 getImageUrl(path) {
                     if (!path) return '';
                     const cleanPath = path.startsWith('/') ? path.substring(1) : path;
-                    return `${API_BASE_URL}/static_images/${cleanPath}`;
+                    // 使用相对路径
+                    return `/static_images/${cleanPath}`;
                 },
                 renderLatexInElement() {
                     if (typeof renderMathInElement === 'undefined') {

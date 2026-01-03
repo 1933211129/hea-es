@@ -13,12 +13,20 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': {
+      // 代理 API 请求到后端
+      '/papers': {
         target: 'http://localhost:8003',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '')
+        changeOrigin: true
+      },
+      '/feedback': {
+        target: 'http://localhost:8003',
+        changeOrigin: true
       },
       '/static_images': {
+        target: 'http://localhost:8003',
+        changeOrigin: true
+      },
+      '/static_pdfs': {
         target: 'http://localhost:8003',
         changeOrigin: true
       }

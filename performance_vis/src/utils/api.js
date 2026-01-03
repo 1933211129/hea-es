@@ -1,6 +1,8 @@
 import axios from 'axios'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8003'
+// 使用相对路径，适配 Docker 环境
+// 开发环境可以通过环境变量覆盖，生产环境使用空字符串（相对路径）
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -38,7 +40,8 @@ export const paperApi = {
   getImageUrl(path) {
     if (!path) return ''
     const cleanPath = path.startsWith('/') ? path.substring(1) : path
-    return `${API_BASE_URL}/static_images/${cleanPath}`
+    // 使用相对路径
+    return `/static_images/${cleanPath}`
   },
 
   // 获取 PDF URL
@@ -46,7 +49,8 @@ export const paperApi = {
     try {
       const response = await api.get(`/papers/${identifier}/pdf`)
       if (response.data && response.data.url) {
-        return `${API_BASE_URL}${response.data.url}`
+        // 使用相对路径
+        return response.data.url
       }
       return null
     } catch (error) {
