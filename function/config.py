@@ -9,10 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ChatAnywhere API 配置
-CHATANYWHERE_API_KEY = os.getenv(
-    "CHATANYWHERE_API_KEY", 
-    "sk-"
-)
+CHATANYWHERE_API_KEY = os.getenv("CHATANYWHERE_API_KEY")
 CHATANYWHERE_API_URL = "https://api.chatanywhere.tech/v1/chat/completions"
 CHATANYWHERE_MODEL = "deepseek-v3.2"
 

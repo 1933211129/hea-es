@@ -30,3 +30,14 @@
 /performance_vis/*.njsproj
 /performance_vis/*.sln
 /performance_vis/*.sw?
+__pycache__
+__pycache__/*
+__pycache__/*/*
+__pycache__/*/*/*
+__pycache__/*/*/*/*
+__pycache__/*/*/*/*/*
+__pycache__/*/*/*/*/*/*
+__pycache__/*/*/*/*/*/*/*
+__pycache__/*/*/*/*/*/*/*/*
+__pycache__/*/*/*/*/*/*/*/*/*
+__pycache__/*/*/*/*/*/*/*/*/*/*
